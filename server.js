@@ -26,6 +26,8 @@ const { initializeSocket } = require('./services/socketService');
 const errorHandler = require('./middleware/errorHandler');
 
 const userRoutes = require('./routes/userRoutes');
+const connectionRoutes = require('./routes/connectionRoutes');
+
 // Initialize App
 const app = express();
 const server = http.createServer(app);
@@ -102,6 +104,9 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/chats', chatRoutes);
 app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/connections', connectionRoutes);
+
+
 
 // ----------------------
 // Socket.io Setup
