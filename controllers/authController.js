@@ -33,6 +33,7 @@ exports.login = async (req, res, next) => {
     if (!user || !(await user.correctPassword(password))) {
       return next(new AppError('Incorrect email or password', 401));
     }
+    console.log('User found:', user);
     const token = signToken(user._id);
     res.status(200).json({
       status: 'success',
