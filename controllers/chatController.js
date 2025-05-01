@@ -64,13 +64,25 @@ exports.getAllChats = async (req, res, next) => {
 exports.getChat = async (req, res, next) => {
   try {
     const chat = await Chat.findById(req.params.id)
-      .populate('participants', 'username avatar')
+      .populate({
+        path: 'participants',
+        select: 'username avatar isOnline connectionType',
+        transform: doc => ({
+          id: doc._id,
+          username: doc.username,
+          avatar: doc.avatar,
+          isOnline: doc.isOnline,
+          connectionType: doc.connectionType
+        })
+      })
       .populate('lastMessage');
+
     res.status(200).json(chat);
   } catch (err) {
     next(err);
   }
 };
+
 
 exports.updateChat = async (req, res, next) => {
   try {
