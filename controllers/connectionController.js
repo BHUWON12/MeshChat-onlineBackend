@@ -2,83 +2,70 @@ const Connection = require('../models/Connection');
 const User = require('../models/User');
 const AppError = require('../utils/appError');
 
-// Get all connections and pending requests for current user
+// Get all connections and requests
 exports.getConnections = async (req, res, next) => {
   try {
     const userId = req.user._id;
 
-    // Find accepted connections where user is requester or recipient
     const accepted = await Connection.find({
       $and: [
         { status: 'accepted' },
-        { $or: [{ requester: userId }, { recipient: userId }] },
-      ],
+        { $or: [{ requester: userId }, { recipient: userId }] }
+      ]
     }).populate('requester recipient', 'username avatar');
 
-    // Find pending requests received by user
     const pendingReceived = await Connection.find({
       recipient: userId,
-      status: 'pending',
+      status: 'pending'
     }).populate('requester', 'username avatar');
 
-    // Find pending requests sent by user
     const pendingSent = await Connection.find({
       requester: userId,
-      status: 'pending',
+      status: 'pending'
     }).populate('recipient', 'username avatar');
 
     res.status(200).json({
       status: 'success',
-      data: {
-        accepted,
-        pendingReceived,
-        pendingSent,
-      },
+      data: { accepted, pendingReceived, pendingSent }
     });
   } catch (err) {
     next(err);
   }
 };
 
-// Send a connection request
+// Send connection request
 exports.sendConnectionRequest = async (req, res, next) => {
   try {
     const requester = req.user._id;
     const recipient = req.params.userId;
 
     if (requester.equals(recipient)) {
-      return next(new AppError('Cannot send connection request to yourself', 400));
+      return next(new AppError('Cannot connect with yourself', 400));
     }
 
-    // Check if connection already exists
     const existing = await Connection.findOne({
       $or: [
         { requester, recipient },
-        { requester: recipient, recipient: requester },
-      ],
+        { requester: recipient, recipient: requester }
+      ]
     });
 
     if (existing) {
-      return next(new AppError('Connection or request already exists', 400));
+      return next(new AppError('Connection already exists', 400));
     }
 
     const connection = await Connection.create({ requester, recipient });
-
-    res.status(201).json({
-      status: 'success',
-      data: connection,
-    });
+    res.status(201).json({ status: 'success', data: connection });
   } catch (err) {
     next(err);
   }
 };
 
-// Respond to a connection request (accept or reject)
+// Respond to request
 exports.respondToRequest = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const { action } = req.body;
     const requestId = req.params.requestId;
-    const { action } = req.body; // expected 'accept' or 'reject'
 
     if (!['accept', 'reject'].includes(action)) {
       return next(new AppError('Invalid action', 400));
@@ -87,31 +74,25 @@ exports.respondToRequest = async (req, res, next) => {
     const connection = await Connection.findById(requestId);
 
     if (!connection) {
-      return next(new AppError('Connection request not found', 404));
+      return next(new AppError('Request not found', 404));
     }
 
-    if (!connection.recipient.equals(userId)) {
-      return next(new AppError('Not authorized to respond to this request', 403));
+    if (!connection.recipient.equals(req.user._id)) {
+      return next(new AppError('Unauthorized action', 403));
     }
 
     connection.status = action === 'accept' ? 'accepted' : 'rejected';
     await connection.save();
 
-    res.status(200).json({
-      status: 'success',
-      data: connection,
-    });
+    res.status(200).json({ status: 'success', data: connection });
   } catch (err) {
     next(err);
   }
 };
 
+// Remove connection
 exports.removeConnection = async (req, res, next) => {
   try {
-    // REPLACE THIS
-    // await connection.remove(); ❌ Old code causing error
-    
-    // WITH THIS ✅
     const result = await Connection.deleteOne({
       _id: req.params.connectionId,
       $or: [
@@ -121,16 +102,63 @@ exports.removeConnection = async (req, res, next) => {
     });
 
     if (result.deletedCount === 0) {
-      return next(new AppError('Connection not found or unauthorized', 404));
+      return next(new AppError('Connection not found', 404));
     }
 
     res.status(204).json({ status: 'success', data: null });
   } catch (err) {
-    next(new AppError('Deletion failed', 500));
+    next(err);
   }
 };
 
-// New controller: Check if a connection request exists between current user and another user
+// Check connection status
+exports.checkConnectionStatus = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const otherUserId = req.params.userId;
+
+    const connection = await Connection.findOne({
+      status: 'accepted',
+      $or: [
+        { requester: userId, recipient: otherUserId },
+        { requester: otherUserId, recipient: userId }
+      ]
+    });
+
+    res.status(200).json({
+      status: 'success',
+      exists: !!connection,
+      accepted: !!connection
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Check request status
+exports.checkRequestStatus = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const otherUserId = req.params.userId;
+
+    const request = await Connection.findOne({
+      status: 'pending',
+      $or: [
+        { requester: userId, recipient: otherUserId },
+        { requester: otherUserId, recipient: userId }
+      ]
+    });
+
+    res.status(200).json({
+      status: 'success',
+      exists: !!request
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Check any existing connection/request
 exports.checkConnectionRequest = async (req, res, next) => {
   try {
     const userId = req.user._id;
@@ -140,14 +168,13 @@ exports.checkConnectionRequest = async (req, res, next) => {
       $or: [
         { requester: userId, recipient: otherUserId },
         { requester: otherUserId, recipient: userId }
-      ],
-      status: { $in: ['pending', 'accepted'] }
+      ]
     });
 
     res.status(200).json({
       status: 'success',
       exists: !!existing,
-      data: existing,
+      status: existing?.status || null
     });
   } catch (err) {
     next(err);

@@ -4,22 +4,25 @@ const connectionSchema = new mongoose.Schema({
   requester: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: true
   },
   recipient: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: true
   },
   status: {
     type: String,
     enum: ['pending', 'accepted', 'rejected'],
     default: 'pending',
+    required: true
   },
-}, {
-  timestamps: true,
+  initiatedAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: Date
 });
 
-connectionSchema.index({ requester: 1, recipient: 1 }, { unique: true });
-
-module.exports = mongoose.model('Connection', connectionSchema);
+const Connection = mongoose.model('Connection', connectionSchema);
+module.exports = Connection;

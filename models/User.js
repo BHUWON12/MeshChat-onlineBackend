@@ -1,75 +1,62 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: [true, 'Username is required'],
-    unique: true,
-    trim: true,
-    minlength: [3, 'Username must be at least 3 characters'],
-    maxlength: [20, 'Username cannot exceed 20 characters']
-  },
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    lowercase: true,
-    index: true,
-    validate: {
-      validator: function(v) {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-      },
-      message: props => `${props.value} is not a valid email!`
-    }
-  },
-  password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: [8, 'Password must be at least 8 characters']
-  },
-  avatar: {
-    type: String,
-    default: 'default-avatar.png'
+// Define the connection schema first
+const connectionSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   status: {
     type: String,
-    enum: ['online', 'offline', 'away'],
-    default: 'offline'
+    enum: ['pending', 'accepted', 'rejected'],
+    required: true
   },
-  devices: [{
-    type: {
-      type: String,
-      enum: ['mobile', 'desktop', 'tablet'],
-      required: true
-    },
-    token: String,
-    lastActive: Date
-  }],
-  lastSeen: Date,
+  initiatedAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: Date
+}, { _id: false });  // Set _id to false as this schema is embedded
+
+// Define your user schema
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: [true, 'Please tell us your username!']
+  },
+  email: {
+    type: String,
+    required: [true, 'Please provide your email!'],
+    unique: true
+  },
+  password: {
+    type: String,
+    required: [true, 'Please provide a password'],
+    minlength: 8,
+    select: false
+  },
+  connections: [connectionSchema]  // Reference connectionSchema here
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-// Add text index for search
-userSchema.index({ username: 'text', email: 'text' });
-
-userSchema.virtual('chats', {
-  ref: 'Chat',
-  localField: '_id',
-  foreignField: 'participants'
-});
-
-userSchema.pre('save', async function(next) {
+// Hash password before saving the user
+userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
-userSchema.methods.correctPassword = async function(candidatePassword) {
+// Method to check password
+userSchema.methods.correctPassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-module.exports = mongoose.model('User', userSchema);
+// Avoid overwriting the User model
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+module.exports = User;

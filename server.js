@@ -24,7 +24,6 @@ const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const { initializeSocket } = require('./services/socketService');
 const errorHandler = require('./middleware/errorHandler');
-
 const userRoutes = require('./routes/userRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
 
@@ -43,7 +42,7 @@ dbConnect();
 const whitelist = [
   'http://localhost:8081',          // React Native web dev
   'http://localhost:19006',         // Expo web
-  'exp://192.168.1.10:19000',       // Expo on device (replace with your LAN IP)
+  'exp://192.168.1.10:19000',      // Expo on device (replace with your LAN IP)
   'https://meshchat-onlinebackend.onrender.com' // Production backend
 ];
 
@@ -88,11 +87,11 @@ app.use(xss());
 app.use(hpp());
 
 // Rate Limiting
-app.use('/api', rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000,
-  message: 'Too many requests from this IP, please try again later.'
-}));
+// app.use('/api', rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 1000,
+//   message: 'Too many requests from this IP, please try again later.'
+// }));
 
 // Serving Static Files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -105,8 +104,6 @@ app.use('/api/v1/chats', chatRoutes);
 app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/connections', connectionRoutes);
-
-
 
 // ----------------------
 // Socket.io Setup
