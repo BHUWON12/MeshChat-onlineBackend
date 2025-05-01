@@ -14,6 +14,8 @@ exports.getConnections = async (req, res, next) => {
       ]
     }).populate('requester recipient', 'username avatar');
 
+    console.log('Accepted Connections:', accepted); // Add this line
+
     const pendingReceived = await Connection.find({
       recipient: userId,
       status: 'pending'

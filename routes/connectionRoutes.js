@@ -5,8 +5,8 @@ const {
   sendConnectionRequest,
   respondToRequest,
   removeConnection,
-  checkConnectionStatus, // ✅ Must be exported
-  checkRequestStatus     // ✅ Must be exported
+  checkConnectionStatus,
+  checkRequestStatus
 } = require('../controllers/connectionController');
 
 const router = express.Router();
@@ -18,8 +18,8 @@ router.post('/request/:userId', sendConnectionRequest);
 router.post('/respond/:requestId', respondToRequest);
 router.delete('/:connectionId', removeConnection);
 
-// Add status check routes
-router.get('/check-status/:userId', checkConnectionStatus); // Line 23
-router.get('/request-status/:userId', checkRequestStatus);
+// Status check routes
+router.get('/check/:userId', checkConnectionStatus); // ✅ Matches frontend's checkConnectionStatus
+router.get('/request/check/:userId', checkRequestStatus); // ✅ Add this critical route
 
 module.exports = router;
