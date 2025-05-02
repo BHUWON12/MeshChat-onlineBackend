@@ -7,9 +7,9 @@ const router = express.Router();
 router.use(auth);
 
 // Message routes
-router.post('/:chatId', messageController.sendMessage);
-router.get('/:chatId', messageController.getMessages);
-router.patch('/:messageId', messageController.updateMessage);
-router.delete('/:messageId', messageController.deleteMessage);
+router.post('/chats/:chatId/messages', messageController.sendMessage);
+router.get('/chats/:chatId/messages', messageController.getMessages);
+router.patch('/messages/:messageId', messageController.updateMessage);
+router.delete('/messages/:messageId', messageController.deleteMessage);
 
 module.exports = router;

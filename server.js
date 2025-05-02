@@ -101,9 +101,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ----------------------
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/chats', chatRoutes);
-app.use('/api/v1/messages', messageRoutes);
+// app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/connections', connectionRoutes);
+app.use('/api/v1', require('./routes/messageRoutes'));
+
 
 // ----------------------
 // Socket.io Setup
