@@ -120,3 +120,21 @@ exports.deleteMessage = async (req, res, next) => {
   }
 };
 
+exports.markAsRead = async (req, res, next) => {
+  try {
+    const message = await Message.findById(req.params.messageId);
+    if (!message) return next(new AppError('Message not found', 404));
+
+    const chat = await Chat.findById(message.chatId);
+    if (!chat.participants.some(p => p.equals(req.user._id))) {
+      return next(new AppError('Not authorized for this chat', 403));
+    }
+
+    message.status = 'read';
+    await message.save();
+
+    res.json({ status: 'success', data: { id: message._id, status: message.status } });
+  } catch (err) {
+    next(err);
+  }
+};

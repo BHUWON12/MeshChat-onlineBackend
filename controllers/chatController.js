@@ -49,10 +49,12 @@ exports.initiateChat = async (req, res, next) => {
   }
 };
 
-// Required Methods
 exports.getAllChats = async (req, res, next) => {
   try {
-    const chats = await Chat.find()
+    // Only return chats where the current user is a participant
+    const chats = await Chat.find({
+      participants: req.user._id
+    })
       .populate('participants', 'username avatar')
       .populate('lastMessage');
     res.status(200).json(chats);
@@ -60,6 +62,7 @@ exports.getAllChats = async (req, res, next) => {
     next(err);
   }
 };
+
 
 exports.getChat = async (req, res, next) => {
   try {
@@ -77,11 +80,17 @@ exports.getChat = async (req, res, next) => {
       })
       .populate('lastMessage');
 
+    // Check participant
+    if (!chat || !chat.participants.some(p => p.id == req.user._id.toString() || p._id == req.user._id.toString())) {
+      return next(new AppError('Not authorized for this chat', 403));
+    }
+
     res.status(200).json(chat);
   } catch (err) {
     next(err);
   }
 };
+
 
 
 exports.updateChat = async (req, res, next) => {
