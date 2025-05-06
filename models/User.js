@@ -37,6 +37,12 @@ const userSchema = new mongoose.Schema({
     minlength: 8,
     select: false
   },
+  // *** ADDED BIO FIELD HERE ***
+  bio: {
+    type: String,
+    default: '' // Optional: set a default empty string if no bio is provided
+  },
+  // *** END ADDED BIO FIELD ***
   connections: [connectionSchema]  // Reference connectionSchema here
 }, {
   timestamps: true,

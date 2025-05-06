@@ -15,24 +15,25 @@ exports.getCurrentUser = async (req, res, next) => {
     next(err);
   }
 };
-
 exports.updateUserProfile = async (req, res, next) => {
   try {
-    const allowedUpdates = ['username', 'email', 'avatar', 'bio'];
+    const allowedUpdates = ['username', 'email', 'avatar', 'bio']; // 'bio' is included here
     const updates = {};
     for (const key of allowedUpdates) {
-      if (req.body[key] !== undefined) updates[key] = req.body[key];
+      if (req.body[key] !== undefined) updates[key] = req.body[key]; // It attempts to add bio from req.body
     }
 
+    // It uses findByIdAndUpdate with the collected updates
     const updatedUser = await User.findByIdAndUpdate(req.user._id, updates, {
       new: true,
       runValidators: true,
-    }).select('-password');
+    }).select('-password'); // It selects all fields except password
 
     if (!updatedUser) {
       return next(new AppError('User not found', 404));
     }
 
+    // It sends the updated user object back
     res.status(200).json({
       status: 'success',
       data: updatedUser,
