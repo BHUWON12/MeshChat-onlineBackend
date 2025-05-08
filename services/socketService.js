@@ -84,6 +84,7 @@ const initializeSocket = (server) => {
 
     // Mark user as online in the database
     // Use exec() without await means this operation runs in the background
+    // Added console.log for success/error
     User.findByIdAndUpdate(userId, { isOnline: true, lastActive: new Date() })
       .then(() => console.log(`SocketService: User ${userId} marked online in DB.`))
       .catch(err => console.error(`SocketService: Error marking user ${userId} online in DB:`, err));
@@ -100,13 +101,17 @@ const initializeSocket = (server) => {
 
     // --- Handle 'presence' Event ---
     // Optional: Handle events where the frontend explicitly sets presence (e.g., goes offline manually)
-    socket.on('presence', async (statusUpdate) => { 
+    socket.on('presence', async (statusUpdate) => {
         const userId = socket.user.id;
-        const isOnline = statusUpdate?.isOnline;
+        // Check if statusUpdate is an object and has an isOnline property
+        const isOnline = typeof statusUpdate === 'object' && statusUpdate !== null ? statusUpdate.isOnline : undefined;
 
-        // Basic validation
+
+        // Basic validation - check if isOnline is explicitly true or false
         if (typeof isOnline !== 'boolean') {
              console.warn(`SocketService: Received invalid presence status from user ${userId}:`, statusUpdate);
+             // Optionally send an error back to the client
+             // callback?.({ status: 'error', message: 'Invalid presence status' });
              return; // Ignore invalid updates
         }
 
@@ -200,6 +205,7 @@ const initializeSocket = (server) => {
           metadata: data.metadata || {},
           status: 'sent', // Set initial status to 'sent' after creation
           // readBy is empty initially, will be populated by mark-as-read
+          readBy: [], // Explicitly initialize readBy as an empty array
         });
 
         // Log after successfully creating the message
@@ -214,9 +220,10 @@ const initializeSocket = (server) => {
 
         // --- Prepare and Emit 'new-message' Event ---
         // Populate sender information as frontend ChatBubble needs it
-        const populatedMessage = await Message.findById(message._id).populate('sender', 'username avatar');
+        // Use lean() to get a plain JavaScript object for easier manipulation
+        const populatedMessage = await Message.findById(message._id).populate('sender', 'username avatar').lean();
 
-        const messageObject = populatedMessage ? populatedMessage.toObject() : message.toObject();
+        const messageObject = populatedMessage || message.toObject(); // Use populated if successful, otherwise the basic object
 
         // *** ADD THIS BLOCK to include tempId for Optimistic Updates ***
         if (tempId) { // Check if tempId was sent from the frontend
@@ -260,7 +267,8 @@ const initializeSocket = (server) => {
       try {
         // Find the message by its ID
         // Ensure message belongs to a chat the user is in for robust security
-        const message = await Message.findById(messageId);
+        // Use lean() to get a plain JavaScript object
+        const message = await Message.findById(messageId).lean();
         if (!message) {
             console.log(`SocketService: Message not found for ID ${messageId}`);
              return callback?.({ status: 'error', message: 'Message not found' });
@@ -281,21 +289,34 @@ const initializeSocket = (server) => {
 
         // --- Update Message Read Status in DB ---
         // Check if the reader is already in the readBy array to avoid adding duplicates
-        const alreadyRead = message.readBy.some(r => r.readerId && r.readerId.equals(readerId));
+        // Use (message.readBy || []) to handle cases where readBy is undefined or null
+        const alreadyRead = (message.readBy || []).some(r => r.readerId && r.readerId.equals(readerId)); // <-- FIX IS HERE
+
         if (!alreadyRead) {
+            // Find the message again as a Mongoose document to save changes
+            const messageDoc = await Message.findById(messageId);
+            if (!messageDoc) {
+                 console.log(`SocketService: Message document not found for ID ${messageId} during update.`);
+                 return callback?.({ status: 'error', message: 'Message document not found for update' });
+            }
+
             // Add the reader's ID and timestamp to the readBy array
-            message.readBy.push({ readerId: readerId, readAt: new Date() });
+            messageDoc.readBy.push({ readerId: readerId, readAt: new Date() });
             // Optionally update the general status to 'read' here if you rely on a single status field
             // This depends on your frontend's interpretation - checking readBy.length is often better.
             // If message.status should strictly become 'read' ONLY when ALL participants have read it,
             // you'd need more complex logic here (check readBy.length against chat.participants.length).
             // For simple "at least one other person read it" status, setting to 'read' is okay.
-            message.status = 'read'; // Set status to 'read'
+            // Only set to 'read' if it's not already 'read' (e.g., from a previous read by another user)
+            if (messageDoc.status !== 'read') {
+               messageDoc.status = 'read'; // Set status to 'read'
+            }
 
-            console.log(`SocketService: Adding reader ${readerId} to readBy for message ${messageId}. Status set to 'read'.`);
 
-            // Save the updated message
-            await message.save();
+            console.log(`SocketService: Adding reader ${readerId} to readBy for message ${messageId}. Status set to '${messageDoc.status}'. ReadBy count: ${messageDoc.readBy.length}`);
+
+            // Save the updated message document
+            await messageDoc.save();
             console.log(`SocketService: Message ${messageId} read status updated in DB by user ${readerId}.`);
 
 
@@ -303,13 +324,15 @@ const initializeSocket = (server) => {
             // Broadcast the read status update to all clients in the chat room
             // Include messageId, readerId, chatId, and timestamp
             const messageReadPayload = {
-                messageId: message._id.toString(), // Convert ObjectId to string
+                messageId: messageDoc._id.toString(), // Convert ObjectId to string
                 readerId: readerId.toString(),       // Convert ObjectId to string
-                chatId: message.chatId.toString(),   // Include chatId
+                chatId: messageDoc.chatId.toString(),   // Include chatId
                 readAt: new Date().toISOString(),    // Include timestamp
+                // Optional: Include the updated status if frontend needs it directly
+                status: messageDoc.status,
             };
-            io.to(message.chatId.toString()).emit('message-read', messageReadPayload);
-            console.log(`SocketService: Emitted 'message-read' for message ${messageId} by user ${readerId} to chat room ${message.chatId}.`, messageReadPayload);
+            io.to(messageDoc.chatId.toString()).emit('message-read', messageReadPayload);
+            console.log(`SocketService: Emitted 'message-read' for message ${messageId} by user ${readerId} to chat room ${messageDoc.chatId}.`, messageReadPayload);
 
         } else {
              console.log(`SocketService: Message ${messageId} already read by user ${readerId}. No DB update or emission needed.`);
@@ -340,13 +363,17 @@ const initializeSocket = (server) => {
          }
 
          try {
-             // Update status for multiple messages in one go
+             // Find messages that need status update and belong to chats the recipient is in (security check)
+             // Use updateMany for efficiency
              const updateResult = await Message.updateMany(
                  {
                      _id: { $in: messageIds }, // Match message IDs
-                     status: { $ne: 'read' }, // Only update if not already 'read'
-                     // Optional: Add security check - ensure recipient is a participant in the chat(s)
-                     // This would require finding chats for these messages and checking participant list.
+                     status: { $nin: ['read', 'delivered'] }, // Only update if status is not already 'read' or 'delivered'
+                     // Add security check: ensure recipient is a participant in the chat(s) of these messages
+                     // This requires a more complex query or iterating through messages to check chats.
+                     // For simplicity here, we'll trust the frontend sends correct IDs, but add a basic check.
+                     // This basic check is NOT fully secure; a join or separate check per message is better.
+                     chatId: { $in: await Chat.find({ participants: recipientId }).select('_id') } // Check if message's chat includes recipient
                  },
                  {
                      $set: { status: 'delivered' } // Set status to 'delivered'
@@ -356,9 +383,25 @@ const initializeSocket = (server) => {
              if (updateResult.modifiedCount > 0) {
                  console.log(`SocketService: Marked ${updateResult.modifiedCount} messages as delivered for user ${recipientId}.`);
                  // Emit an event to notify clients that message statuses have changed to 'delivered'
-                 // This event should include the message IDs that were updated.
-                 io.emit('messages-delivered', { messageIds: messageIds, recipientId: recipientId });
-                  console.log(`SocketService: Emitted 'messages-delivered' for message IDs:`, messageIds);
+                 // This event should include the message IDs that were updated and the recipientId.
+                 // Emit to the specific chat rooms involved for efficiency
+                 const updatedMessages = await Message.find({ _id: { $in: messageIds }, status: 'delivered' }).select('chatId _id status');
+                 const chatsToEmit = new Set(updatedMessages.map(msg => msg.chatId.toString()));
+
+                 chatsToEmit.forEach(chatId => {
+                     const deliveredMessageIdsInChat = updatedMessages
+                         .filter(msg => msg.chatId.toString() === chatId)
+                         .map(msg => msg._id.toString());
+
+                     const messageDeliveredPayload = {
+                         messageIds: deliveredMessageIdsInChat,
+                         recipientId: recipientId.toString(),
+                         chatId: chatId, // Include chatId
+                     };
+                     io.to(chatId).emit('messages-delivered', messageDeliveredPayload);
+                     console.log(`SocketService: Emitted 'messages-delivered' for chat ${chatId} with message IDs:`, deliveredMessageIdsInChat);
+                 });
+
              } else {
                  console.log(`SocketService: No messages needed status update to 'delivered' for user ${recipientId}.`);
              }
