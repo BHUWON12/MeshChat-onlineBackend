@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const notificationController = require('../controllers/notificationController');
-const { protect } = require('../middleware/auth');
+// Correctly import the default exported middleware
+const protect = require('../middleware/auth'); // CORRECTED IMPORT
 
 // All routes are protected
-router.use(protect);
+router.use(protect); // This will now correctly use the imported middleware function
 
 // Get all notifications
 router.get('/', notificationController.getNotifications);
