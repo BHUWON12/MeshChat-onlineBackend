@@ -39,7 +39,9 @@ dbConnect();
 const whitelist = [
   'http://localhost:8081',
   'http://localhost:19006',
-  'exp://192.168.1.10:19000', // Replace with your LAN IP if needed
+  'http://localhost:3000',
+  'exp://localhost:19000',
+  'exp://192.168.1.10:19000',
   'https://meshchat-onlinebackend.onrender.com' // Production backend
 ];
 
